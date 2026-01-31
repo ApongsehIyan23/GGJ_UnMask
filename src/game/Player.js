@@ -42,8 +42,10 @@ export function createPlayer(x, y) {
     return {
         x,
         y,
+        z: 0,
         vx: 0,
         vy: 0,
+        vz: 0,
         isGrounded: false,
         currentMask: MASKS.STANDARD,
         ...MASKS.STANDARD // Apply initial mask props
@@ -56,10 +58,15 @@ export function updatePlayer(player, dt) {
     if (Input.isJustPressed('MASK_2')) switchMask(player, MASKS.HEAVY);
     if (Input.isJustPressed('MASK_3')) switchMask(player, MASKS.FLOAT);
 
-    // Movement
+    // X-Axis Movement
     player.vx = 0;
     if (Input.isDown('LEFT')) player.vx = -player.speed;
     if (Input.isDown('RIGHT')) player.vx = player.speed;
+
+    // Z-Axis Movement (Forward/Backward)
+    player.vz = 0;
+    if (Input.isDown('UP')) player.vz = -player.speed;
+    if (Input.isDown('DOWN')) player.vz = player.speed;
 
     // Jump
     if (Input.isDown('JUMP') && player.isGrounded) {
@@ -68,8 +75,9 @@ export function updatePlayer(player, dt) {
         spawnDust(player.x + player.width / 2, player.y + player.height); // Jump dust
     }
 
-    // Physics
+    // Physics Integration
     player.x += player.vx * dt;
+    player.z += player.vz * dt;
     player.y += player.vy * dt;
 
     // Custom Gravity per Mask
@@ -115,7 +123,4 @@ function switchMask(player, maskDef) {
     console.log(`Switched to ${maskDef.id} Mask`);
 }
 
-export function drawPlayer(ctx, player) {
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
-}
+

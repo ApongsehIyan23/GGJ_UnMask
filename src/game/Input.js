@@ -21,6 +21,8 @@ const KEY_MAP = {
     '1': 'MASK_1',
     '2': 'MASK_2',
     '3': 'MASK_3',
+    Enter: 'CONFIRM',
+    i: 'INTERROGATE',
 };
 
 window.addEventListener('keydown', (e) => {
