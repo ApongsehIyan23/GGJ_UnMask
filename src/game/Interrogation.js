@@ -1,250 +1,371 @@
 /**
  * Interrogation.js
- * Handles the UI and logic for the interrogation 'battle'.
+ * Logic Core for "The Ghost in Room 404" (Spiced Edition)
  */
 
-import { findSuspectById } from './Suspect';
-import { spawnExplosion, spawnDust } from './Particles';
-import { setScreenShake } from './GameLoop';
+import { setPhase } from './GameState';
 
-// Create initial interrogation state for a suspect
-export function startInterrogation(gameState, suspectId) {
-    const s = findSuspectById(suspectId);
-    if (!s) return;
+// --- GAME STATE ---
+export const interrogationState = {
+    currentSuspectId: null,
+    maskIntegrity: 100,
+    suspectStress: 0,
+    stage: 'PRISTINE',
+    strikes: 0, // 3 Strikes = Game Over
 
-    gameState.phase = 'INTERROGATION';
-    gameState.interrogation = {
-        suspect: { ...s },
-        guard: s.baseGuard,
-        masked: true,
-        lastResponse: pick(s.maskedResponses),
-        ui: {}
-    };
-}
+    // Inventory
+    evidence: [
+        { id: 'key_log', name: "Master Key Log", desc: "Access: 2PM (Maid), 3PM (Manager), 4:15PM (Guest)." },
+        { id: 'wrapper', name: "Choco Wrapper", desc: "Lobby exclusive brand. Fingerprints on foil." },
+        { id: 'photo', name: "Family Photo", desc: "Marcus with his real sister. She's blonde." }
+    ],
 
-function pick(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
+    knowledge: {
+        knows_red_coat: false,
+        knows_cctv: false,
+        knows_bribery: false
+    },
 
-// Simple mechanic outcomes
-export function empathize(gameState) {
-    const iq = gameState.interrogation;
-    iq.guard = Math.max(0, iq.guard - 15);
-    iq.lastResponse = pick(iq.masked ? iq.suspect.maskedResponses : iq.suspect.unmaskedResponses);
-    spawnDust(200, 200);
-}
+    currentDialogueId: 'root',
+    isGameOver: false,
+    gameResult: null
+};
 
-export function pressure(gameState) {
-    const iq = gameState.interrogation;
-    // Pressure may cause them to slip depending on guard
-    const chance = Math.max(10, 40 - Math.round((100 - iq.guard) / 5));
-    if (Math.random() * 100 < chance) {
-        // slip
-        iq.masked = false;
-        iq.lastResponse = pick(iq.suspect.unmaskedResponses);
-        spawnExplosion(300, 200, '#ffaaaa', 20);
-        setScreenShake(12);
-    } else {
-        iq.guard = Math.min(120, iq.guard + 10);
-        iq.lastResponse = "They're getting defensive...";
-        spawnDust(250, 250);
-    }
-}
+export const SUSPECTS = {
+    'beatrice': { name: "Beatrice (Maid)", role: "Theft Mask", difficulty: "Easy" },
+    'jean': { name: "Officer Jean", role: "Laziness Mask", difficulty: "Medium" },
+    'bizimana': { name: "Mr. Bizimana", role: "Reputation Mask", difficulty: "Medium" },
+    'elena': { name: "Elena Vance", role: "The Sister?", difficulty: "Hard" }
+};
 
-export function presentEvidence(gameState, clue) {
-    const iq = gameState.interrogation;
-    if (!clue) return { success: false, reason: 'No clue' };
-
-    const match = iq.suspect.truthMatches.includes(clue.id);
-    if (match) {
-        iq.masked = false;
-        iq.lastResponse = pick(iq.suspect.unmaskedResponses);
-        spawnExplosion(320, 220, '#88ff88', 30);
-        setScreenShake(18);
-        return { success: true };
-    } else {
-        iq.guard = Math.min(120, iq.guard + 20);
-        iq.lastResponse = "That's not relevant.";
-        spawnDust(320, 220);
-        return { success: false };
-    }
-}
-
-export function updateInterrogation(gameState, dt) {
-    // For now, nothing time-based is required; placeholder for animations
-    // Possible future: timer-based choices, patience meter decay
-}
-
-export function drawInterrogation(ctx, canvas, gameState) {
-    const iq = gameState.interrogation;
-    if (!iq) return;
-
-    const PAD = 16;
-    const panelW = Math.min(900, canvas.width - PAD * 2);
-    const panelH = 320;
-    const panelX = (canvas.width - panelW) / 2;
-    const panelY = (canvas.height - panelH) / 2;
-
-    ctx.save();
-    // Background dim
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Panel
-    ctx.fillStyle = '#151515';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#333';
-    ctx.strokeRect(panelX + 1, panelY + 1, panelW - 2, panelH - 2);
-
-    // Portrait box (left)
-    const px = panelX + 20;
-    const py = panelY + 20;
-    const pw = 180;
-    const ph = 240;
-    ctx.fillStyle = iq.suspect.color;
-    ctx.fillRect(px, py, pw, ph);
-
-    // Mask overlay
-    ctx.fillStyle = iq.masked ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0)';
-    ctx.fillRect(px, py, pw, ph);
-
-    // Suspect name + guard
-    ctx.fillStyle = '#fff';
-    ctx.font = '18px sans-serif';
-    ctx.fillText(iq.suspect.name, px + pw + 20, py + 28);
-    ctx.fillStyle = '#ddd';
-    ctx.font = '12px sans-serif';
-    ctx.fillText(`Guard: ${iq.guard}`, px + pw + 20, py + 48);
-
-    // Dialogue box
-    const dx = px + pw + 20;
-    const dy = py + 60;
-    const dw = panelW - (pw + 60);
-    const dh = 120;
-
-    // Dialogue background
-    ctx.fillStyle = '#0f0f0f';
-    ctx.fillRect(dx, dy, dw, dh);
-    ctx.strokeStyle = '#222';
-    ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2);
-
-    ctx.fillStyle = '#fff';
-    ctx.font = '14px monospace';
-    // Mask effect: if masked, hide some words
-    let text = iq.lastResponse;
-    if (iq.masked) {
-        text = maskText(text);
-    }
-    wrapText(ctx, text, dx + 10, dy + 24, dw - 20, 18);
-
-    // Buttons: Empathize | Pressure | Present Evidence
-    const btnY = dy + dh + 20;
-    const btnW = 180;
-    const gap = 16;
-    const btnX = dx;
-
-    const buttons = [
-        { id: 'EMPATHIZE', label: 'Empathize', x: btnX, y: btnY, w: btnW, h: 40 },
-        { id: 'PRESSURE', label: 'Pressure', x: btnX + (btnW + gap), y: btnY, w: btnW, h: 40 },
-        { id: 'EVIDENCE', label: 'Present Evidence', x: btnX + 2 * (btnW + gap), y: btnY, w: btnW, h: 40 }
-    ];
-
-    for (const b of buttons) {
-        ctx.fillStyle = '#222';
-        ctx.fillRect(b.x, b.y, b.w, b.h);
-        ctx.strokeStyle = '#444';
-        ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px sans-serif';
-        ctx.fillText(b.label, b.x + 12, b.y + 26);
-    }
-
-    // If in evidence selection mode, draw clue boxes below portrait
-    const clues = gameState.player.clues || [];
-    const clueBoxes = [];
-    if (gameState._showEvidencePicker) {
-        const cx = px;
-        const cy = py + ph + 12;
-        const cw = 120;
-        const ch = 44;
-        for (let i = 0; i < clues.length; i++) {
-            const x = cx + i * (cw + 8);
-            const y = cy;
-            ctx.fillStyle = '#111';
-            ctx.fillRect(x, y, cw, ch);
-            ctx.strokeStyle = '#333';
-            ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
-            ctx.fillStyle = '#fff';
-            ctx.font = '12px sans-serif';
-            ctx.fillText(clues[i].title, x + 8, y + 26);
-            clueBoxes.push({ x, y, w: cw, h: ch, clue: clues[i] });
-        }
-    }
-
-    // Save UI boxes for click handling
-    iq.ui = { buttons, clueBoxes };
-
-    ctx.restore();
-}
-
-function maskText(t) {
-    // Simple masking: replace 30% of visible letters with *
-    return t.split(' ').map(w => (Math.random() < 0.3 ? '*'.repeat(Math.max(3, Math.floor(w.length / 2))) : w)).join(' ');
-}
-
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-    const words = text.split(' ');
-    let line = '';
-    for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-            ctx.fillText(line, x, y);
-            line = words[n] + ' ';
-            y += lineHeight;
-        } else {
-            line = testLine;
-        }
-    }
-    ctx.fillText(line, x, y);
-}
-
-export function handleInterrogationClick(gameState, x, y) {
-    const iq = gameState.interrogation;
-    if (!iq || !iq.ui) return false;
-
-    // Check buttons
-    for (const b of iq.ui.buttons) {
-        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-            if (b.id === 'EMPATHIZE') {
-                empathize(gameState);
-            } else if (b.id === 'PRESSURE') {
-                pressure(gameState);
-            } else if (b.id === 'EVIDENCE') {
-                // Toggle evidence picker
-                gameState._showEvidencePicker = !gameState._showEvidencePicker;
-            }
-            return true;
-        }
-    }
-
-    // If evidence picker is shown, check clue boxes
-    if (gameState._showEvidencePicker) {
-        for (const cb of iq.ui.clueBoxes) {
-            if (x >= cb.x && x <= cb.x + cb.w && y >= cb.y && y <= cb.y + cb.h) {
-                const res = presentEvidence(gameState, cb.clue);
-                gameState._showEvidencePicker = false;
-                // If success, we can end interrogation and return to RUNNING
-                if (res.success) {
-                    // store result for player
-                    gameState.player.foundConfession = true;
-                    gameState.phase = 'RUNNING';
+// --- SCRIPTS WITH DETECTIVE QUERIES ---
+const SCRIPTS = {
+    'beatrice': {
+        'root': {
+            text: "I... I just changed the towels, sir. I didn't see anything! I'm a good worker!",
+            approaches: {
+                'probe': {
+                    query: "We checked the logs. You entered at 2 PM. Why so nervous?",
+                    text: "I'm not nervous! I just... I don't like police. Please let me go.",
+                    damage: 10, stress: 10, next: 'beatrice_nerves'
+                },
+                'pry': {
+                    query: "You're shaking, Beatrice. Tell me what you took.",
+                    text: "I... I needed the money! But I didn't kill him! I swear!",
+                    damage: 30, stress: 30, next: 'beatrice_theft'
                 }
-                return true;
+            }
+        },
+        'beatrice_nerves': {
+            text: "I'm not nervous! I just... I don't like police. Please let me go.",
+            approaches: {
+                'pry': {
+                    query: "We checked your pockets. $50 cash. The victim's wallet is empty.",
+                    text: "Okay! I took the money! But I was hiding in the closet when SHE came in!",
+                    damage: 50, stress: 50, next: 'beatrice_break'
+                }
+            },
+            evidence: {
+                'key_log': {
+                    query: "The log says you were there for 20 minutes. That's a long time for towels.",
+                    text: "I... I needed the money! But I didn't kill him! I swear!",
+                    damage: 20, stress: 20, next: 'beatrice_theft'
+                }
+            }
+        },
+        'beatrice_theft': {
+            text: "I... I needed the money! But I didn't kill him! I swear!",
+            approaches: {
+                'probe': {
+                    query: "If you didn't kill him, give me a name. Who else was there?",
+                    text: "I saw a woman! In a red coat! She went in after I left the closet. I ran away!",
+                    damage: 100, stress: 0, next: 'beatrice_confess'
+                },
+                'provoke': {
+                    query: "You're a thief and a liar. Why should I believe you?",
+                    text: "I don't have to listen to this! I want a lawyer!",
+                    stress: 100, next: 'shutdown' // Trap
+                }
+            }
+        },
+        'beatrice_break': {
+            text: "Okay! I took the money! But I was hiding in the closet when SHE came in! A woman in a Red Coat!",
+            isEnd: true, unlock: 'knows_red_coat', rewardText: "INTEL: 'Woman in Red Coat' seen entering at 4PM."
+        },
+        'beatrice_confess': {
+            text: "I saw a woman! In a red coat! She went in after I left the closet. I ran away!",
+            isEnd: true, unlock: 'knows_red_coat', rewardText: "INTEL: 'Woman in Red Coat' seen entering at 4PM."
+        }
+    },
+
+    'jean': {
+        'root': {
+            text: "I was on my rounds. 4th floor patrol. Security is airtight here.",
+            evidence: {
+                'key_log': {
+                    query: "The Key Log shows no badge scans on the 4th floor between 3 and 5 PM.",
+                    text: "Look, the game was on! Manchester vs Liverpool! I... I might have sat down for a bit.",
+                    damage: 60, stress: 20, next: 'jean_caught'
+                }
+            },
+            approaches: {
+                'pry': {
+                    query: "We checked the breakroom cameras, Jean. We know.",
+                    text: "Look, the game was on! Manchester vs Liverpool! I... I might have sat down for a bit.",
+                    damage: 40, stress: 10, next: 'jean_caught'
+                }
+            }
+        },
+        'jean_caught': {
+            text: "Look, the game was on! Manchester vs Liverpool! I... I might have sat down for a bit.",
+            approaches: {
+                'provoke': {
+                    query: "A man died while you watched soccer. Give me something or you're fired.",
+                    text: "Alright! I checked the lobby tapes to cover my tracks. A woman bought that specific chocolate at 4:05.",
+                    damage: 100, stress: 50, next: 'jean_confess'
+                }
+            }
+        },
+        'jean_confess': {
+            text: "Alright! I checked the lobby tapes to cover my tracks. A woman bought that specific chocolate at 4:05.",
+            isEnd: true, unlock: 'knows_cctv', rewardText: "EVIDENCE: 'Lobby CCTV Transcript'"
+        }
+    },
+
+    'bizimana': {
+        'root': {
+            text: "Mr. Thorne was a valued guest. I only visited to check on a noise complaint.",
+            approaches: {
+                'provoke': {
+                    query: "A noise complaint? At 3 PM? He was alone.",
+                    text: "He was... loud on the phone. Shouting about tax records. Bad for business.",
+                    damage: 30, stress: 20, next: 'bizimana_defensive'
+                }
+            }
+        },
+        'bizimana_defensive': {
+            text: "He was... loud on the phone. Shouting about tax records. Bad for business.",
+            approaches: {
+                'probe': {
+                    query: "Tax records? He was a whistleblower. Were you bribing him to leave?",
+                    text: "I offered him a refund to go elsewhere! He was bringing heat on us! But I didn't poison him!",
+                    damage: 80, stress: 40, next: 'bizimana_break'
+                }
+            }
+        },
+        'bizimana_break': {
+            text: "I offered him a refund to go elsewhere! He was bringing heat on us! But I didn't poison him!",
+            isEnd: true, unlock: 'knows_bribery', rewardText: "INTEL: Motive established (Bribery), but alibi checks out."
+        }
+    },
+
+    'elena': {
+        'root': {
+            text: "I'm his sister... I just came to say goodbye. Why are you doing this to me?",
+            evidence: {
+                'photo': {
+                    query: "This is Marcus and his real sister. She's blonde. You aren't.",
+                    text: "I left my purse in the taxi! Have some respect!",
+                    damage: 50, stress: 60, next: 'elena_Lie1'
+                }
+            },
+            approaches: {
+                'probe': {
+                    query: "You two seem close. Do you have ID?",
+                    text: "I left my purse in the taxi! Have some respect!",
+                    damage: 10, stress: 0, next: 'elena_deflect'
+                }
+            }
+        },
+        'elena_deflect': {
+            text: "I left my purse in the taxi! Have some respect!",
+            evidence: {
+                'photo': {
+                    query: "Respect facts. This is his real sister.",
+                    text: "Fine! I'm a... close friend. An ex. Is it a crime to visit an ex?",
+                    damage: 60, stress: 80, next: 'elena_Lie1'
+                }
+            }
+        },
+        'elena_Lie1': {
+            text: "Fine! I'm a... close friend. An ex. Is it a crime to visit an ex?",
+            approaches: {
+                'probe': {
+                    query: "Manager saw you in the lobby at 4:00. Why didn't you go up?",
+                    text: "I was... admiring the architecture.",
+                    damage: 20, stress: 10, next: 'elena_structure'
+                },
+            }
+        },
+        'elena_structure': {
+            text: "I was... admiring the architecture.",
+            evidence: {
+                'cctv_log': {
+                    query: "CCTV shows you in the Gift Shop. Buying chocolate.",
+                    text: "Plenty of people buy chocolate! You can't pin this on me!",
+                    damage: 80, stress: 50, next: 'elena_cornered'
+                }
+            },
+            approaches: {
+                'provoke': {
+                    query: "Buying snacks? Like chocolate?",
+                    text: "Plenty of people buy chocolate! You can't pin this on me!",
+                    damage: 40, stress: 40, next: 'elena_cornered'
+                }
+            }
+        },
+        'elena_cornered': {
+            text: "Plenty of people buy chocolate! You can't pin this on me!",
+            evidence: {
+                'wrapper': {
+                    query: "This brand. Only sold there. And your fingerprints are inside the foil.",
+                    text: "[MASK SHATTERED] He should have taken the deal. It was just business.",
+                    damage: 100, stress: 100, next: 'elena_finale'
+                }
+            }
+        },
+        'elena_finale': {
+            text: "[MASK SHATTERED] He should have taken the deal. It was just business.",
+            isEnd: true, result: "VICTORY"
+        },
+        'shutdown': {
+            text: "[SUSPECT HAS SHUT DOWN. LAWYER REQUESTED.]",
+            isEnd: true, result: "STRIKE"
+        }
+    }
+};
+
+// --- LOGIC ---
+
+export function startInterrogation() {
+    interrogationState.currentSuspectId = null;
+    interrogationState.strikes = 0;
+    interrogationState.isGameOver = false;
+    interrogationState.gameResult = null;
+    console.log("LOGIC: Mystery Started");
+}
+
+export function selectSuspect(id) {
+    if (!SUSPECTS[id]) return;
+    interrogationState.currentSuspectId = id;
+    interrogationState.maskIntegrity = 100;
+    interrogationState.suspectStress = 0;
+    interrogationState.stage = 'PRISTINE';
+    interrogationState.currentDialogueId = 'root';
+    console.log("LOGIC: Selected " + id);
+}
+
+export function returnToHub() {
+    interrogationState.currentSuspectId = null;
+}
+
+export function performAction(type, id) {
+    const script = SCRIPTS[interrogationState.currentSuspectId];
+    if (!script) return;
+
+    const node = script[interrogationState.currentDialogueId];
+    if (!node) return;
+
+    let outcome = null;
+    if (type === 'approach') {
+        outcome = node.approaches ? node.approaches[id] : null;
+    } else if (type === 'evidence') {
+        outcome = node.evidence ? node.evidence[id] : null;
+    }
+
+    if (!outcome) {
+        console.log("LOGIC: Weak Action");
+        // Weak actions increase stress slightly without damage?
+        interrogationState.suspectStress += 5;
+        return;
+    }
+
+    // Apply Effects
+    interrogationState.maskIntegrity -= outcome.damage || 0;
+    interrogationState.suspectStress += outcome.stress || 0;
+
+    // Store last query for UI
+    interrogationState.lastQuery = outcome.query || "...";
+
+    // STRIKE LOGIC: Over-stressing triggers shutdown
+    if (interrogationState.suspectStress >= 100 && !outcome.isSafe) {
+        // If the outcome didn't explicitly lead to safe node, checking context...
+        // Actually, let's use the 'next' node to see if it is 'shutdown'
+        if (outcome.next === 'shutdown') {
+            interrogationState.strikes++;
+            interrogationState.suspectStress = 0; // Reset for next attempt? Or Lock suspect?
+            // For Jam simplicity: Reset Suspect, kick to Hub, add Strike.
+            interrogationState.currentSuspectId = null;
+            if (interrogationState.strikes >= 3) {
+                endGame("GAME OVER: TOO MANY MISTAKES");
+                return;
             }
         }
     }
 
-    return false;
+    // Clamp
+    if (interrogationState.maskIntegrity < 0) interrogationState.maskIntegrity = 0;
+    if (interrogationState.suspectStress > 100) interrogationState.suspectStress = 100;
+    if (interrogationState.suspectStress < 0) interrogationState.suspectStress = 0;
+
+    // Check Stages
+    if (interrogationState.maskIntegrity < 30) interrogationState.stage = 'SHATTERED';
+    else if (interrogationState.maskIntegrity < 70) interrogationState.stage = 'CRACKED';
+
+    // Unlocks
+    if (outcome.unlock) {
+        interrogationState.knowledge[outcome.unlock] = true;
+        if (outcome.unlock === 'knows_cctv') {
+            addEvidence('cctv_log', "Lobby CCTV", "Shows Elena verifying choco purchase.");
+        }
+    }
+
+    // Move Next
+    if (outcome.next) {
+        interrogationState.currentDialogueId = outcome.next;
+    }
+
+    // Immediate Victory/Defeat Checks
+    const nextNode = script[interrogationState.currentDialogueId];
+    if (nextNode && nextNode.isEnd) {
+        if (nextNode.result === "VICTORY") {
+            interrogationState.gameResult = "VICTORY";
+            interrogationState.isGameOver = true;
+        } else if (nextNode.result === "STRIKE") {
+            // Already handled above, but just to be safe
+            interrogationState.strikes++;
+            returnToHub();
+        } else {
+            // Standard node end (Intel Gained)
+            setTimeout(() => {
+                returnToHub();
+            }, 4000);
+        }
+    }
+}
+
+function addEvidence(id, name, desc) {
+    if (!interrogationState.evidence.find(e => e.id === id)) {
+        interrogationState.evidence.push({ id, name, desc });
+    }
+}
+
+function endGame(result) {
+    interrogationState.isGameOver = true;
+    interrogationState.gameResult = result;
+}
+
+export function getState() {
+    if (!interrogationState.currentSuspectId) {
+        return { isHub: true, ...interrogationState };
+    }
+    const script = SCRIPTS[interrogationState.currentSuspectId];
+    const node = script[interrogationState.currentDialogueId];
+    return {
+        isHub: false,
+        ...interrogationState,
+        text: node ? node.text : "...",
+        lastQuery: interrogationState.lastQuery, // Send query to UI
+        rewardText: node ? node.rewardText : null
+    };
 }

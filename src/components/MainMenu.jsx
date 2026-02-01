@@ -3,7 +3,7 @@ import { setPhase } from '../game/GameLoop';
 export function MainMenu() {
 
     const handleStart = () => {
-        setPhase('PREP');
+        setPhase('INTERROGATION');
     };
 
     const handleLoad = () => {

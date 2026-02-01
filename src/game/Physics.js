@@ -32,3 +32,29 @@ export function resolveFloorCollision(entity) {
         entity.isGrounded = false;
     }
 }
+
+const ROOM_BOUNDS = {
+    minX: -750,
+    maxX: 750,
+    minZ: -250,
+    maxZ: 1000
+};
+
+export function resolveWallCollision(entity) {
+    if (entity.x < ROOM_BOUNDS.minX) {
+        entity.x = ROOM_BOUNDS.minX;
+        entity.vx = 0;
+    }
+    if (entity.x > ROOM_BOUNDS.maxX) {
+        entity.x = ROOM_BOUNDS.maxX;
+        entity.vx = 0;
+    }
+    if (entity.z < ROOM_BOUNDS.minZ) {
+        entity.z = ROOM_BOUNDS.minZ;
+        entity.vz = 0;
+    }
+    if (entity.z > ROOM_BOUNDS.maxZ) {
+        entity.z = ROOM_BOUNDS.maxZ;
+        entity.vz = 0;
+    }
+}

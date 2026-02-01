@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { Vector3 } from 'three';
+import { useRef } from 'react';
+import { useFrame, useLoader } from '@react-three/fiber';
+import { TextureLoader } from 'three';
+import { Billboard, Text } from '@react-three/drei';
+import { FLOOR_Y } from '../game/Physics';
 
 export function Characters() {
     return (
@@ -13,78 +15,60 @@ export function Characters() {
 
 function Detective() {
     const group = useRef();
-    const patrolTime = useRef(0);
+    const texture = useLoader(TextureLoader, '/textures/silas_sprite.png');
 
-    useFrame((state, delta) => {
+    // Patrol Logic
+    useFrame(({ clock }) => {
         if (!group.current) return;
 
-        // Simple Patrol Logic: Pace back and forth
-        patrolTime.current += delta * 0.5; // slow pace
-        const patrolX = Math.sin(patrolTime.current) * 300; // Oscillate between -300 and 300
+        // Stationary for Interrogation
+        group.current.position.set(200, -FLOOR_Y + 75, 100);
 
-        // Walk towards the window (-Z) and back
-        // Start: [0, -FLOOR_Y, 0]
-        // Path: From Desk (200, 100) to Window (-200, -300) ??
-        // Let's just walk along X for now near the desk
-
-        group.current.position.set(200 + Math.sin(patrolTime.current) * 100, -450, 100 + Math.cos(patrolTime.current) * 50);
-        group.current.rotation.y = Math.atan2(Math.cos(patrolTime.current), -Math.sin(patrolTime.current)); // Face direction
+        // Always face player/camera
+        group.current.scale.x = 1;
     });
 
     return (
-        <group ref={group} position={[200, -450, 100]}>
-            {/* Body (Trenchcoat) */}
-            <mesh position={[0, 45, 0]} castShadow>
-                <capsuleGeometry args={[15, 90, 4, 8]} />
-                <meshStandardMaterial color="#3e2723" roughness={0.9} />
-            </mesh>
-            {/* Head (Fedora) */}
-            <group position={[0, 90, 0]}>
-                <mesh position={[0, 0, 0]}>
-                    <sphereGeometry args={[12, 16, 16]} />
-                    <meshStandardMaterial color="#ffccaa" />
+        <group ref={group} position={[200, -FLOOR_Y + 75, 100]}>
+            <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
+                <mesh castShadow receiveShadow>
+                    <planeGeometry args={[100, 150]} /> {/* Aspect ratio approx 2:3 */}
+                    <meshStandardMaterial map={texture} transparent alphaTest={0.5} roughness={0.8} />
                 </mesh>
-                {/* Hat */}
-                <mesh position={[0, 8, 0]}>
-                    <cylinderGeometry args={[14, 14, 2]} />
-                    <meshStandardMaterial color="#222" />
-                </mesh>
-                <mesh position={[0, 14, 0]}>
-                    <cylinderGeometry args={[8, 8, 12]} />
-                    <meshStandardMaterial color="#222" />
-                </mesh>
-            </group>
+            </Billboard>
+            {/* Name Tag */}
+            <Billboard position={[0, 90, 0]}>
+                <Text fontSize={20} color="white" outlineWidth={2} outlineColor="black">
+                    Detective
+                </Text>
+            </Billboard>
         </group>
     );
 }
 
 function Witness() {
+    const texture = useLoader(TextureLoader, '/textures/witness_sprite.png');
     const group = useRef();
 
     useFrame(({ clock }) => {
         if (!group.current) return;
-        // Nervous idle animation
-        group.current.rotation.z = Math.sin(clock.elapsedTime * 5) * 0.02; // Shaking
+        // Nervous jitter
+        group.current.position.x = 600 + Math.random() * 2;
     });
 
     return (
-        <group ref={group} position={[700, -450, 200]} rotation={[0, -1, 0]}>
-            {/* Chair is in prop, this is just person */}
-            {/* Body */}
-            <mesh position={[0, 35, 0]} castShadow>
-                <boxGeometry args={[30, 70, 30]} />
-                <meshStandardMaterial color="#556" />
-            </mesh>
-            {/* Head */}
-            <mesh position={[0, 75, 0]}>
-                <sphereGeometry args={[10, 16, 16]} />
-                <meshStandardMaterial color="#aa8866" />
-            </mesh>
-            {/* Legs (Sitting) */}
-            <mesh position={[0, 15, 20]}>
-                <boxGeometry args={[30, 20, 30]} />
-                <meshStandardMaterial color="#334" />
-            </mesh>
+        <group ref={group} position={[600, -FLOOR_Y + 60, 200]}>
+            <Billboard follow={true}>
+                <mesh castShadow receiveShadow>
+                    <planeGeometry args={[90, 120]} />
+                    <meshStandardMaterial map={texture} transparent alphaTest={0.5} roughness={0.8} />
+                </mesh>
+            </Billboard>
+            <Billboard position={[0, 80, 0]}>
+                <Text fontSize={20} color="#aaf" outlineWidth={2} outlineColor="black">
+                    Witness
+                </Text>
+            </Billboard>
         </group>
     );
 }

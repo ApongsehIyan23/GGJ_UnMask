@@ -23,11 +23,18 @@ const KEY_MAP = {
     '3': 'MASK_3',
     Enter: 'CONFIRM',
     i: 'INTERROGATE',
+    I: 'INTERROGATE',
+    p: 'FORCE_INT',
+    P: 'FORCE_INT'
 };
 
 window.addEventListener('keydown', (e) => {
+    // Debug Log
+    // console.log(`[Input] Raw Key Down: ${e.key}`);
+
     const action = KEY_MAP[e.key];
     if (action) {
+        // console.log(`[Input] Action Mapped: ${action}`);
         if (!keys[action]) {
             justPressed[action] = true;
         }
@@ -55,10 +62,6 @@ export const Input = {
         justReleased[action] = false;
         return result;
     },
-    update: () => {
-        // Clear 'just' states if we wanted strict frame alignment, 
-        // but consuming them on read is often safer for variable FPS.
-    },
-    // Debug
+    update: () => { },
     getKeys: () => keys
 };

@@ -1,12 +1,9 @@
-import { Canvas } from '@react-three/fiber';
 import { useState, useEffect, Suspense } from 'react';
 import Spline from '@splinetool/react-spline';
 import './App.css';
-import { GameScene } from './components/GameScene';
-import { setDebugCallback, onPhaseChange, gameState } from './game/GameLoop';
-import { PrepUI } from './components/PrepUI';
-import { InterrogationUI } from './components/InterrogationUI';
+import { setDebugCallback, onPhaseChange, gameState } from './game/GameState';
 import { MainMenu } from './components/MainMenu';
+import { InterrogationScene } from './components/InterrogationScene';
 
 function App() {
   const [debugInfo, setDebugInfo] = useState("Loading...");
@@ -16,6 +13,7 @@ function App() {
     setDebugCallback(setDebugInfo);
     // Subscribe to phase changes to trigger UI re-renders
     const cleanup = onPhaseChange((newPhase) => {
+      console.log("App: Phase Changed to", newPhase);
       setPhaseState(newPhase);
     });
     return cleanup;
@@ -35,34 +33,13 @@ function App() {
       {/* Main Menu Layer */}
       {phase === 'MENU' && <MainMenu />}
 
-      {/* Gameplay Layer: R3F Canvas - Only visible during gameplay phases */}
+      {/* Visual Novel Interrogation Scene */}
+      {phase === 'INTERROGATION' && <InterrogationScene />}
+
+      {/* Debug Panel */}
       {phase !== 'MENU' && (
-        <div className="canvas-wrapper" style={{ zIndex: 5, background: '#222' }}>
-          <Canvas shadows>
-            <GameScene />
-          </Canvas>
-        </div>
-      )}
-
-      {/* Game Phase UIs */}
-      {phase === 'PREP' && <PrepUI />}
-      {phase === 'INTERROGATION' && <InterrogationUI />}
-
-      {/* HUD Overlay - Only visible during gameplay */}
-      {phase !== 'MENU' && phase !== 'INTERROGATION' && (
-        <div className="ui-overlay">
-          <div className="file-header">
-            <h1>GGJ: UnMask</h1>
-            <div className="status-badge">CASE #4022</div>
-          </div>
-
-          <div className="debug-panel">
-            <pre>{debugInfo}</pre>
-          </div>
-
-          <div className="controls-hint">
-            ARROWS to move | SPACE to jump | 1, 2, 3 to Mask
-          </div>
+        <div className="debug-panel" style={{ position: 'absolute', top: 10, left: 10, opacity: 0.5 }}>
+          <pre>{debugInfo}</pre>
         </div>
       )}
     </div>

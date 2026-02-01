@@ -1,98 +1,93 @@
 /**
  * GameLoop.js
- * Handles the main game loop logic, decoupled from rendering.
+ * Handles the main game loop logic.
  */
 
 import { Input } from './Input';
 import { createPlayer, updatePlayer } from './Player';
 import { updateParticles } from './Particles';
-import { createClues, getSelectedClues } from './Clues';
-import { startInterrogation, updateInterrogation } from './Interrogation';
+import { gameState, setScreenShake, getDebugCallback, setPhase, onPhaseChange } from './GameState';
+import { startInterrogation } from './Interrogation';
+import { showRenderer, hideRenderer } from './InterrogationRenderer';
 
-// Game State
-export const gameState = {
-    phase: 'MENU', // 'MENU' | 'PREP' | 'RUNNING' | 'INTERROGATION'
-    player: createPlayer(100, 100),
-    shake: 0,
-    fps: 0,
-    clues: createClues(),
-    _clueBoxes: [] // Kept for logic, though might need 3D raycasting later
-};
+export { setScreenShake, setPhase, onPhaseChange } from './GameState';
+export { setDebugCallback } from './GameState';
+export { gameState };
 
-let debugCallback = null;
-
-export function setScreenShake(amount) {
-    gameState.shake = amount;
-}
-
-export function setDebugCallback(cb) {
-    debugCallback = cb;
+export function initGame() {
+    if (!gameState.player) {
+        gameState.player = createPlayer(100, 100);
+        // Ensure renderer handles phase changes if needed
+        onPhaseChange((p) => {
+            if (p !== 'INTERROGATION') hideRenderer();
+        });
+    }
 }
 
 export function update(dt) {
+    // Ensure player exists
+    if (!gameState.player) initGame();
+
     // PREP Logic is handled by React UI now
     // We just update particles/shake
     if (gameState.phase === 'PREP') {
         updateParticles(dt);
-        if (gameState.shake > 0) {
-            gameState.shake -= 100 * dt;
-            if (gameState.shake < 0) gameState.shake = 0;
-        }
+        decayShake(dt);
         return;
     }
 
-    // Quick debug key to start interrogation (optional, or move to React)
-    if (Input.isJustPressed('INTERROGATE')) {
+    // Proximity Check for Silas
+    const SILAS_POS = { x: 200, z: 100 };
+    const dx = gameState.player.x - SILAS_POS.x;
+    const dz = gameState.player.z - SILAS_POS.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    gameState.canInterrogate = dist < 500;
+
+    // Interaction Trigger
+    const inputInt = Input.isJustPressed('INTERROGATE');
+    const inputForce = Input.isJustPressed('FORCE_INT');
+
+    if ((inputInt && gameState.canInterrogate) || inputForce) {
+        console.log("[Loop] STARTING VANILLA INTERROGATION");
         triggerInterrogation('taxi');
     }
 
     if (gameState.phase === 'INTERROGATION') {
-        // updates for animations?
         updateParticles(dt);
-        if (gameState.shake > 0) {
-            gameState.shake -= 100 * dt;
-            if (gameState.shake < 0) gameState.shake = 0;
-        }
+        decayShake(dt);
         return;
     }
 
-    updatePlayer(gameState.player, dt);
+    updatePlayer(gameState.player, dt, gameState.cameraYaw || 0);
     updateParticles(dt);
-
-    if (gameState.shake > 0) {
-        gameState.shake -= 100 * dt; // Decay shake
-        if (gameState.shake < 0) gameState.shake = 0;
-    }
+    decayShake(dt);
 
     // Basic FPS/Debug info update
+    const debugCallback = getDebugCallback();
     if (debugCallback && Math.random() < 0.05) {
         debugCallback(`Phase: ${gameState.phase}
-Mask: ${gameState.player.currentMask.id}
-Pos: ${Math.round(gameState.player.x)}, ${Math.round(gameState.player.y)}`);
+Mask: ${gameState.player?.currentMask?.id}
+Pos: ${Math.round(gameState.player?.x)}, ${Math.round(gameState.player?.y)}`);
     }
 }
 
-// Listeners
-const phaseListeners = new Set();
-export function onPhaseChange(cb) {
-    phaseListeners.add(cb);
-    return () => phaseListeners.delete(cb);
-}
-
-export function setPhase(newPhase) {
-    gameState.phase = newPhase;
-    phaseListeners.forEach(cb => cb(newPhase));
+function decayShake(dt) {
+    if (gameState.shake > 0) {
+        gameState.shake -= 100 * dt;
+        if (gameState.shake < 0) gameState.shake = 0;
+    }
 }
 
 export function triggerInterrogation(suspectId) {
-    if (gameState.player.clues && gameState.player.clues.length > 0) {
-        startInterrogation(gameState, suspectId);
-        setPhase('INTERROGATION');
-        if (debugCallback) debugCallback('Starting interrogation with ' + suspectId);
-    } else {
-        setScreenShake(8);
-        if (debugCallback) debugCallback('No clues: complete prep first');
-    }
+    startInterrogation();
+    setPhase('INTERROGATION');
+    showRenderer();
+    console.log("VANILLA UI OPENED");
 }
+
+
+
+
 
 

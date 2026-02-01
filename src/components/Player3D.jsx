@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { gameState } from '../game/GameLoop';
+import { gameState } from '../game/GameState';
 import { RoundedBox } from '@react-three/drei';
 
 export function Player3D() {

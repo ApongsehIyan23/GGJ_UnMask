@@ -1,12 +1,12 @@
 /**
  * Player.js
- * Handles player state, physics, and mask mechanics.
+ * Handles player state, logic, and physics.
  */
 
 import { Input } from './Input';
-import { applyGravity, resolveFloorCollision, GRAVITY } from './Physics';
+import { applyGravity, resolveFloorCollision, resolveWallCollision, GRAVITY } from './Physics';
 import { spawnExplosion, spawnDust } from './Particles';
-import { setScreenShake } from './GameLoop';
+import { setScreenShake } from './GameState';
 
 const MASKS = {
     STANDARD: {
@@ -52,54 +52,76 @@ export function createPlayer(x, y) {
     };
 }
 
-export function updatePlayer(player, dt) {
+export function updatePlayer(player, dt, cameraYaw = 0) {
     // Mask Switching
     if (Input.isJustPressed('MASK_1')) switchMask(player, MASKS.STANDARD);
     if (Input.isJustPressed('MASK_2')) switchMask(player, MASKS.HEAVY);
     if (Input.isJustPressed('MASK_3')) switchMask(player, MASKS.FLOAT);
 
-    // X-Axis Movement
-    player.vx = 0;
-    if (Input.isDown('LEFT')) player.vx = -player.speed;
-    if (Input.isDown('RIGHT')) player.vx = player.speed;
+    // --- MOVEMENT LOGIC (Camera Relative) ---
 
-    // Z-Axis Movement (Forward/Backward)
-    player.vz = 0;
-    if (Input.isDown('UP')) player.vz = -player.speed;
-    if (Input.isDown('DOWN')) player.vz = player.speed;
+    let inputZ = 0; // Forward/Back
+    let inputX = 0; // Left/Right
+
+    if (Input.isDown('UP')) inputZ = -1; // Forward
+    if (Input.isDown('DOWN')) inputZ = 1; // Backward
+    if (Input.isDown('LEFT')) inputX = -1; // Left
+    if (Input.isDown('RIGHT')) inputX = 1; // Right
+
+    const yaw = cameraYaw;
+
+    // Normalize input
+    if (inputX !== 0 || inputZ !== 0) {
+        const length = Math.sqrt(inputX * inputX + inputZ * inputZ);
+        inputX /= length;
+        inputZ /= length;
+
+        // Apply Player Speed
+        inputX *= player.speed;
+        inputZ *= player.speed;
+
+        // Rotate by Camera Yaw
+        const s = Math.sin(yaw);
+        const c = Math.cos(yaw);
+
+        // Rotated Vector
+        player.vx = inputX * c - inputZ * s;
+        player.vz = inputX * s + inputZ * c;
+    } else {
+        player.vx = 0;
+        player.vz = 0;
+    }
+
+    // --- PHYSICS ---
 
     // Jump
     if (Input.isDown('JUMP') && player.isGrounded) {
         player.vy = player.jumpForce;
         player.isGrounded = false;
-        spawnDust(player.x + player.width / 2, player.y + player.height); // Jump dust
+        spawnDust(player.x + player.width / 2, player.y + player.height);
     }
 
-    // Physics Integration
+    // Gravity
+    player.vy += (GRAVITY * player.gravityScale) * dt;
+
+    // Terminal Velocity
+    if (player.vy > 1000) player.vy = 1000;
+
+    // Integration
     player.x += player.vx * dt;
     player.z += player.vz * dt;
     player.y += player.vy * dt;
 
-    // Custom Gravity per Mask
-    // We need to modify the shared applyGravity or just do it here manually/override
-    // Since applyGravity is simple, let's just do logic here or pass scale
-
-    // Re-implementing gravity locally to support scale for now
-    // OR export a flexible gravity function. 
-    // For now:
-    player.vy += (GRAVITY * player.gravityScale) * dt;
-
-    // Terminal velocity clamp (optional but good)
-    if (player.vy > 1000) player.vy = 1000;
-
+    // Collisions
     const wasGrounded = player.isGrounded;
     resolveFloorCollision(player);
+    resolveWallCollision(player);
 
-    // Land Dust
+    // Land Effects
     if (!wasGrounded && player.isGrounded) {
         if (player.currentMask.id === 'HEAVY') {
             spawnExplosion(player.x + player.width / 2, player.y + player.height, '#aaaaaa', 20);
-            setScreenShake(20); // Heavy impact
+            setScreenShake(20);
         } else {
             spawnDust(player.x + player.width / 2, player.y + player.height);
         }
@@ -119,8 +141,5 @@ function switchMask(player, maskDef) {
     player.jumpForce = maskDef.jumpForce;
     player.gravityScale = maskDef.gravityScale;
 
-    // Optional: Visual effect triggers would go here
     console.log(`Switched to ${maskDef.id} Mask`);
 }
-
-
